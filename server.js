@@ -1,55 +1,69 @@
-Enterimport express from "express";
-import { chromium } from "playwright";
+const express = require("express");
+const axios = require("axios");
 
 const app = express();
+
 app.use(express.json());
 
-app.post("/duck", async (req, res) => {
-  const { message } = req.body;
+app.post("/api/v1/ai/chat/duckai", async (req, res) => {
+    try {
+        const { message } = req.body;
 
-  if (!message) {
-    return res.json({ success: false, error: "message required" });
-  }
+        if (!message) {
+            return res.status(400).json({
+                success: false,
+                message: "Message is required"
+            });
+        }
 
-  let browser;
+        const response = await axios.post(
+            "https://duck.ai/duckchat/v1/chat",
+            {
+                model: "claude-haiku-4-5",
+                metadata: {
+                    toolChoice: {
+                        NewsSearch: false,
+                        VideosSearch: false,
+                        LocalSearch: false,
+                        WeatherForecast: false
+                    }
+                },
+                messages: [
+                    {
+                        role: "user",
+                        content: message
+                    }
+                ],
+                canUseTools: true,
+                reasoningEffort: "none"
+            },
+            {
+                headers: {
+                    "User-Agent": "Mozilla/5.0",
+                    "Content-Type": "application/json",
+                    "Accept": "*/*",
+                    "Origin": "https://duck.ai",
+                    "Referer": "https://duck.ai/"
+                }
+            }
+        );
 
-  try {
-    browser = await chromium.launch({
-      headless: true,
-      args: ["--no-sandbox"]
-    });
+        res.json({
+            success: true,
+            message: response.data
+        });
 
-    const page = await browser.newPage();
-
-    await page.goto("https://duck.ai/", { waitUntil: "domcontentloaded" });
-
-    await page.waitForSelector("textarea");
-
-    await page.fill("textarea", message);
-    await page.keyboard.press("Enter");
-
-    await page.waitForTimeout(6000);
-
-    const reply = await page.evaluate(() => {
-      const msgs = document.querySelectorAll('[data-testid="message"]');
-      return msgs[msgs.length - 1]?.innerText || "";
-    });
-
-    await browser.close();
-
-    res.json({
-      success: true,
-      message: reply
-    });
-
-  } catch (err) {
-    if (browser) await browser.close();
-
-    res.json({
-      success: false,
-      error: err.message
-    });
-  }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message,
+            code: error.response?.status || 500
+        });
+    }
 });
 
-app.listen(3000, () => console.log("running"));
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log("Server running on port " + PORT);
+});
